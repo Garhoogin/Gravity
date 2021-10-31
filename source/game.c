@@ -15,6 +15,7 @@ static int *textureIds = NULL;
 #define MODE_WIN      3 /* mode for winning */
 #define MODE_FADEIN   4 /* mode for screen fade-in */
 #define MODE_FADEOUT  5 /* mode for screen fade-out */
+#define MODE_PAUSE    6 /* mode for pausing */
 
 #define NMASS_MAX     64
 
@@ -27,6 +28,10 @@ static int g_mode = MODE_PLAY;
 static int g_modeFrame = 0;
 static int g_outOfBounds = FALSE;
 static int g_outOfBoundsFrames = 0;
+static int g_selection = 0;
+static int g_fadingOut = 0;
+static int g_fadeTo = SCENE_SELECT;
+static int g_fadeFrame = 0;
 
 static LEVEL *g_currentLevel = NULL;
 
@@ -120,7 +125,7 @@ void gameInit(){
 	vramSetBankA(VRAM_A_TEXTURE);
 	vramSetBankB(VRAM_B_TEXTURE);
 	vramSetBankC(VRAM_C_SUB_BG);
-	vramSetBankD(VRAM_D_MAIN_BG);
+	vramSetBankD(VRAM_D_MAIN_BG_0x06000000);
 	vramSetBankE(VRAM_E_MAIN_SPRITE);
 	vramSetBankF(VRAM_F_TEX_PALETTE_SLOT0);
 	vramSetBankG(VRAM_G_TEX_PALETTE_SLOT5);
@@ -129,6 +134,10 @@ void gameInit(){
 	//init BG and OAM
 	oamInit(&oamSub, SpriteMapping_2D, FALSE);
 	int sub0 = bgInitSub(0, BgType_Text4bpp, BgSize_T_256x256, 0, 4);
+	int bg1 = bgInit(1, BgType_Text4bpp, BgSize_T_256x256, 0, 4);
+	bgHide(bg1);
+	bgSetPriority(bg1, 0);
+	bgSetPriority(0, 1);
 	
 	//load graphics, starting with palettes
 	u32 palSize = 0;
@@ -140,6 +149,10 @@ void gameInit(){
 	swiWaitForVBlank();
 	dmaCopy(subObjPal, SPRITE_PALETTE_SUB, palSize);
 	free(subObjPal);
+	void *mainBgPal = IO_ReadEntireFile("game/gfx/pause_m_b.ncl.bin", &palSize);
+	swiWaitForVBlank();
+	dmaCopy(mainBgPal, BG_PALETTE, palSize);
+	free(mainBgPal);
 	
 	//character 
 	u32 charSize;
@@ -149,12 +162,18 @@ void gameInit(){
 	void *subObjChar = IO_ReadEntireFile("game/gfx/status_s_o.ncg.bin", &charSize);
 	MI_UncompressLZ16(subObjChar, oamGetGfxPtr(&oamSub, 0));
 	free(subObjChar);
+	void *mainBgChar = IO_ReadEntireFile("game/gfx/pause_m_b.ncg.bin", &charSize);
+	MI_UncompressLZ16(mainBgChar, bgGetGfxPtr(bg1));
+	free(mainBgChar);
 	
 	//screen
 	u32 subBgScrSize;
 	void *subBgScr = IO_ReadEntireFile("game/gfx/top_s_b.nsc.bin", &subBgScrSize);
 	MI_UncompressLZ16(subBgScr, bgGetMapPtr(sub0));
 	free(subBgScr);
+	void *mainBgScr = IO_ReadEntireFile("game/gfx/pause_m_b.nsc.bin", &subBgScrSize);
+	MI_UncompressLZ16(mainBgScr, bgGetMapPtr(bg1));
+	free(mainBgScr);
 	
 	//load level
 	char levelNameBuffer[] = "game/levels/00.glv";
@@ -185,6 +204,9 @@ void gameInit(){
 	memcpy(g_planets, g_currentLevel->pPlanetData, g_nPlanets * sizeof(MASS));
 	
 	g_mode = MODE_FADEIN;
+	g_fadingOut = 0;
+	g_fadeTo = SCENE_SELECT;
+	g_fadeFrame = 0;
 }
 
 void resetLevel() {
@@ -330,6 +352,76 @@ void gameTick(){
 		}
 	}
 	
+	//check pausing?
+	if(keys & KEY_START){
+		if(g_mode == MODE_PLAY) {
+			g_mode = MODE_PAUSE;
+			g_selection = 0;
+			
+			//show the pause menu
+			bgShow(1);
+		} else if(g_mode == MODE_PAUSE) {
+			g_mode = MODE_PLAY;
+			
+			//hide pause menu
+			bgHide(1);
+		}
+	}
+	
+	//if paused, then update pause menu
+	if(g_mode == MODE_PAUSE) {
+		int i;
+		vu16 *refPal = BG_PALETTE;
+		
+		for(i = 1; i < 5; i++){
+			vu16 *pal = BG_PALETTE + (i * 16);
+			
+			int j;
+			for(j = 0; j < 16; j++){
+				u16 src = refPal[j];
+				
+				if(i - 1 != g_selection) pal[j] = src;
+				else {
+					src &= (0x1F << 5) | (0x1F << 10);
+					pal[j] = src;
+				}
+			}
+		}
+	}
+	
+	//if paused, get pause input
+	if(g_mode == MODE_PAUSE) {
+		if(keys & KEY_DOWN) {
+			g_selection++;
+			if(g_selection == 4) g_selection = 0;
+		} else if(keys & KEY_UP) {
+			g_selection--;
+			if(g_selection == -1) g_selection = 3;
+		} else if(keys & KEY_A) {
+			//act on the selection
+			switch(g_selection) {
+				case 0: //resume
+					g_mode = MODE_PLAY;
+					bgHide(1);
+					break;
+				case 1: //reset
+					g_mode = MODE_LOSE;
+					bgHide(1);
+					break;
+				case 2: //level select
+					sceneFadeOut();
+					g_fadingOut = 1;
+					g_fadeTo = SCENE_SELECT;
+					break;
+				case 3: //main menu
+					sceneFadeOut();
+					g_fadingOut = 1;
+					g_fadeTo = SCENE_TITLE;
+					break;
+			}
+		}
+	}
+	
 	//tick objects
 	if(g_mode == MODE_PLAY){
 		g_ball.x += g_ball.vx;
@@ -406,11 +498,13 @@ void gameTick(){
 	//after frame 16 of win loop, fade out.
 	if(g_mode == MODE_WIN && g_modeFrame == 16) {
 		sceneFadeOut();
+		g_fadingOut = 1;
+		g_fadeTo = SCENE_SELECT;
 	}
 	
-	//on frame 32 of win loop, switch scene.
-	if(g_mode == MODE_WIN && g_modeFrame == 32) {
-		g_scene = SCENE_SELECT;
+	if(g_fadingOut) g_fadeFrame++;
+	if(g_fadeFrame == 16) {
+		g_scene = g_fadeTo;
 		LL_UnloadLevel(g_currentLevel);
 	}
 	
