@@ -48,20 +48,21 @@ void titleInit() {
 	tintPalettes = (u16 *) malloc(2 * 128 * (1 + N_PALETTES));
 	
 	//load graphics, start with palettes
-	u32 palSize;
-	void *pal = IO_ReadEntireFile("title/gfx/logo_m_b.ncl.bin", &palSize);
+	u32 mainBgPalSize, mainObjPalSize, subObjPalSize;
+	void *mainBgPal = IO_ReadEntireFile("title/gfx/logo_m_b.ncl.bin", &mainBgPalSize);
+	void *mainObjPal = IO_ReadEntireFile("title/gfx/planet_m_o.ncl.bin", &mainObjPalSize);
+	void *subObjPal = IO_ReadEntireFile("title/gfx/buttons_s_o.ncl.bin", &subObjPalSize);
+	DC_FlushRange(mainBgPal, mainBgPalSize);
+	DC_FlushRange(mainObjPal, mainObjPalSize);
+	DC_FlushRange(subObjPal, subObjPalSize);
 	swiWaitForVBlank();
-	dmaCopy(pal, BG_PALETTE, palSize);
-	free(pal);
-	pal = IO_ReadEntireFile("title/gfx/planet_m_o.ncl.bin", &palSize);
-	swiWaitForVBlank();
-	dmaCopy(pal, SPRITE_PALETTE, palSize);
-	dmaCopy(pal, tintPalettes, palSize);
-	free(pal);
-	pal = IO_ReadEntireFile("title/gfx/buttons_s_o.ncl.bin", &palSize);
-	swiWaitForVBlank();
-	dmaCopy(pal, SPRITE_PALETTE_SUB, palSize);
-	free(pal);
+	dmaCopy(mainBgPal, BG_PALETTE, mainBgPalSize);
+	dmaCopy(mainObjPal, SPRITE_PALETTE, mainObjPalSize);
+	swiCopy(mainObjPal, tintPalettes, mainObjPalSize);
+	dmaCopy(subObjPal, SPRITE_PALETTE_SUB, subObjPalSize);
+	free(mainBgPal);
+	free(mainObjPal);
+	free(subObjPal);
 	
 	//character
 	u32 charSize;
@@ -87,6 +88,7 @@ void titleInit() {
 	*(vu16 *) 0x07000004 = (0) | (3 << 10);
 	
 	//apply transformation to palette
+	DC_FlushRange(tintPalettes, 2 * 128 * (N_PALETTES + 1));
 	for(i = 0; i < 128; i++){
 		u16 c1 = tintPalettes[i];
 		int or = c1 & 0x1F;
@@ -109,6 +111,7 @@ void titleInit() {
 			tintPalettes[i + 128 * (j + 1)] = c2;
 		}
 	}
+	DC_FlushRange(tintPalettes, (N_PALETTES + 1) * 128 * 2);
 	
 	effectY = 0;
 	effectTimes = 0;

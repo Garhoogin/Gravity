@@ -34,19 +34,20 @@ void sceneInit(){
 	oamInit(&oamSub, SpriteMapping_2D, FALSE);
 	
 	//load graphics, start with palettes
-	u32 palSize;
-	void *pal = IO_ReadEntireFile("select/gfx/select_m_b.ncl.bin", &palSize);
+	u32 mainBgPalSize, subBgPalSize, subObjPalSize;
+	void *mainBgPal = IO_ReadEntireFile("select/gfx/select_m_b.ncl.bin", &mainBgPalSize);
+	void *subBgPal = IO_ReadEntireFile("select/gfx/select_s_b.ncl.bin", &subBgPalSize);
+	void *subObjPal = IO_ReadEntireFile("select/gfx/select_text_s_o.ncl.bin", &subObjPalSize);
+	DC_FlushRange(mainBgPal, mainBgPalSize);
+	DC_FlushRange(subBgPal, subBgPalSize);
+	DC_FlushRange(subObjPal, subObjPalSize);
 	swiWaitForVBlank();
-	dmaCopy(pal, BG_PALETTE, palSize);
-	free(pal);
-	pal = IO_ReadEntireFile("select/gfx/select_s_b.ncl.bin", &palSize);
-	swiWaitForVBlank();
-	dmaCopy(pal, BG_PALETTE_SUB, palSize);
-	free(pal);
-	pal = IO_ReadEntireFile("select/gfx/select_text_s_o.ncl.bin", &palSize);
-	swiWaitForVBlank();
-	dmaCopy(pal, SPRITE_PALETTE_SUB, palSize);
-	free(pal);
+	dmaCopy(mainBgPal, BG_PALETTE, mainBgPalSize);
+	dmaCopy(subBgPal, BG_PALETTE_SUB, subBgPalSize);
+	dmaCopy(subObjPal, SPRITE_PALETTE_SUB, subObjPalSize);
+	free(mainBgPal);
+	free(subBgPal);
+	free(subObjPal);
 	
 	//character
 	u32 charSize;

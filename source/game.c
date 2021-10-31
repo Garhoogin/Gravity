@@ -140,18 +140,19 @@ void gameInit(){
 	bgSetPriority(0, 1);
 	
 	//load graphics, starting with palettes
-	u32 palSize = 0;
-	void *subBgPal = IO_ReadEntireFile("game/gfx/top_s_b.ncl.bin", &palSize);
+	u32 subBgPalSize, subObjPalSize, mainBgPalSize;
+	void *subBgPal = IO_ReadEntireFile("game/gfx/top_s_b.ncl.bin", &subBgPalSize);
+	void *subObjPal = IO_ReadEntireFile("game/gfx/status_s_o.ncl.bin", &subObjPalSize);
+	void *mainBgPal = IO_ReadEntireFile("game/gfx/pause_m_b.ncl.bin", &mainBgPalSize);
+	DC_FlushRange(subBgPal, subBgPalSize);
+	DC_FlushRange(subObjPal, subObjPalSize);
+	DC_FlushRange(mainBgPal, mainBgPalSize);
 	swiWaitForVBlank();
-	dmaCopy(subBgPal, BG_PALETTE_SUB, palSize);
+	dmaCopy(subBgPal, BG_PALETTE_SUB, subBgPalSize);
+	dmaCopy(subObjPal, SPRITE_PALETTE_SUB, subObjPalSize);
+	dmaCopy(mainBgPal, BG_PALETTE, mainBgPalSize);
 	free(subBgPal);
-	void *subObjPal = IO_ReadEntireFile("game/gfx/status_s_o.ncl.bin", &palSize);
-	swiWaitForVBlank();
-	dmaCopy(subObjPal, SPRITE_PALETTE_SUB, palSize);
 	free(subObjPal);
-	void *mainBgPal = IO_ReadEntireFile("game/gfx/pause_m_b.ncl.bin", &palSize);
-	swiWaitForVBlank();
-	dmaCopy(mainBgPal, BG_PALETTE, palSize);
 	free(mainBgPal);
 	
 	//character 
